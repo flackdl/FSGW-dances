@@ -1,0 +1,31 @@
+name: opencode-data-refresh
+
+on:
+  schedule:
+    - cron: "0 12 1 * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        with:
+          model: deepseek/deepseek-v4-pro
+          prompt: |
+            Refresh the dance dataset following the instructions in AGENTS.md.
+            Create a Python virtual environment, install crawler/requirements.txt,
+            run `crawler/crawl.py --refresh`, then commit the regenerated
+            data/dances.json on a new branch and open a pull request with a
+            short summary of what changed (record count, years covered).
