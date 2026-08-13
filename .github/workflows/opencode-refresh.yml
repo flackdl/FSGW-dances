@@ -30,8 +30,9 @@ jobs:
           model: deepseek/deepseek-v4-pro
           use_github_token: true
           prompt: |
-            Refresh the dance dataset following the instructions in AGENTS.md.
-            Create a Python virtual environment, install crawler/requirements.txt,
-            run `crawler/crawl.py --refresh`, then commit the regenerated
-            data/dances.json on a new branch and open a pull request with a
-            short summary of what changed (record count, years covered).
+            Refresh the dance dataset following the instructions in AGENTS.md:
+            create a Python virtual environment, install crawler/requirements.txt,
+            and run `crawler/crawl.py --refresh` to regenerate data/dances.json.
+            Do NOT create branches, commit, or push with git — the automation will
+            commit your changes and open a pull request automatically. When done,
+            report the record count and years covered in your reply.
