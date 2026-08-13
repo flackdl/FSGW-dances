@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 .playwright-mcp/
 .idea/
+# CocoIndex Code (ccc)
+/.cocoindex_code/
