@@ -6,6 +6,10 @@ at the Glen Echo Town Hall dances from **1997 through the present**.
 
 Live site: <https://flackdl.github.io/FSGW-dances/>
 
+> **Note:** This repository is agent-friendly — it includes an `AGENTS.md`
+> with commands and gotchas so AI coding agents (like opencode) can work on it
+> efficiently.
+
 ## Features
 
 - **Search** across dance names, callers, musicians, and hosts.
