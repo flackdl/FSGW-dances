@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FSGW Dances Called &mdash; Search &amp; Explore</title>
+<meta name="description" content="Searchable database of English country dances called at FSGW dances in Glen Echo, MD, 1997 through the present.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div>
+      <h1>FSGW English Country Dances</h1>
+      <p class="subtitle">Dances called, callers, and musicians &mdash; Glen Echo Town Hall, 1997&ndash;2026</p>
+    </div>
+    <div class="header-meta">
+      <span class="updated">Data last generated: <span id="generated">&mdash;</span></span>
+      <a class="src-link" href="https://fsgw2.org/ecd/dancescalled/d.called.html" target="_blank" rel="noopener">Source data &nearr;</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="stats" id="stats" aria-label="Summary statistics">
+    <div class="stat"><span class="stat-num" id="stat-total">&mdash;</span><span class="stat-label">Dances called</span></div>
+    <div class="stat"><span class="stat-num" id="stat-unique">&mdash;</span><span class="stat-label">Unique dances</span></div>
+    <div class="stat"><span class="stat-num" id="stat-callers">&mdash;</span><span class="stat-label">Callers</span></div>
+    <div class="stat"><span class="stat-num" id="stat-years">&mdash;</span><span class="stat-label">Years covered</span></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="dances" role="tab" aria-selected="true">Dances</button>
+    <button class="tab" data-view="frequency" role="tab" aria-selected="false">Frequency</button>
+  </nav>
+
+  <section class="controls" id="controls">
+    <div class="controls-row">
+      <input type="search" id="search" class="search" placeholder="Search dance, caller, musician, host&hellip;" autocomplete="off">
+      <button id="clear" class="btn-ghost" title="Clear all filters">Clear</button>
+    </div>
+    <div class="controls-row filters">
+      <label class="field">Year
+        <select id="year"></select>
+      </label>
+      <label class="field">Month
+        <select id="month"></select>
+      </label>
+      <label class="field">Caller
+        <select id="caller"></select>
+      </label>
+      <label class="field">Music
+        <select id="music"></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="break"> First after break (<span class="tilde">~</span>)</label>
+      <label class="chk"><input type="checkbox" id="starred"> Starred (<span class="star">*</span>)</label>
+    </div>
+  </section>
+
+  <section id="view-dances">
+    <div class="result-meta">
+      <span id="result-count"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="dance-table">
+        <thead>
+          <tr>
+            <th data-sort="date" class="sortable" aria-sort="ascending">Date <span class="sort-arrow">&#9650;</span></th>
+            <th data-sort="dance" class="sortable">Dance <span class="sort-arrow"></span></th>
+            <th data-sort="caller" class="sortable">Caller <span class="sort-arrow"></span></th>
+            <th data-sort="music" class="sortable">Musicians <span class="sort-arrow"></span></th>
+            <th class="col-set">Set</th>
+          </tr>
+        </thead>
+        <tbody id="dance-tbody"></tbody>
+      </table>
+    </div>
+    <div id="empty-state" class="empty hidden">No dances match your filters.</div>
+    <div class="pagination">
+      <button id="prev" class="btn">&#8592; Prev</button>
+      <span id="pageinfo"></span>
+      <button id="next" class="btn">Next &#8594;</button>
+    </div>
+  </section>
+
+  <section id="view-frequency" class="hidden">
+    <div class="freq-controls">
+      <div class="freq-tabs">
+        <button class="freq-tab active" data-freq="dance">By dance</button>
+        <button class="freq-tab" data-freq="caller">By caller</button>
+      </div>
+      <input type="search" id="freq-search" placeholder="Filter list&hellip;" autocomplete="off">
+    </div>
+    <div class="result-meta"><span id="freq-count"></span></div>
+    <div class="table-wrap">
+      <table id="freq-table">
+        <thead>
+          <tr><th class="col-rank">#</th><th id="freq-name-col">Dance</th><th class="col-count">Times called</th></tr>
+        </thead>
+        <tbody id="freq-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="freq-prev" class="btn">&#8592; Prev</button>
+      <span id="freq-pageinfo"></span>
+      <button id="freq-next" class="btn">Next &#8594;</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Built from the <a href="https://fsgw2.org/ecd/dancescalled/d.called.html" target="_blank" rel="noopener">FSGW &ldquo;Dances Called&rdquo;</a> listings.
+  Click a dance or caller in the <em>Frequency</em> view to see every time it was called.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
