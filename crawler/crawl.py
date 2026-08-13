@@ -90,6 +90,107 @@ def year_from_filename(fname):
     return None
 
 
+SMALL_WORDS = {
+    "a", "an", "and", "the", "of", "in", "on", "at", "to", "for", "with",
+    "by", "or", "from", "be", "me", "my", "all", "our", "out", "both",
+    "these", "those", "ye", "up", "upon", "is", "as", "into", "over",
+    "after", "before", "o'",
+}
+
+ABBREVIATIONS = {"MA", "VT", "NY", "NYC", "NJ", "CA", "DC", "MD", "PA", "MI",
+                 "UK", "USA", "ECD", "FSGW"}
+
+DANCE_CASE_FIXES = {
+    "Ha'Penny": "Ha'penny",
+    "H'Penny": "H'penny",
+}
+
+CALLER_ALIASES = {
+    "andrea netleton": "Andrea Nettleton",
+    "andrea nettelton": "Andrea Nettleton",
+    "ann fallown": "Ann Fallon",
+    "bob farrel": "Bob Farrall",
+    "bob farrell": "Bob Farrall",
+    "diane schmidt": "Diane Schmit",
+    "kappy lanning": "Kappy Laning",
+    "liz dondalson": "Liz Donaldson",
+    "mellissa running": "Melissa Running",
+    "martha siegel": "Martha Seigel",
+    "martha siegle": "Martha Seigel",
+    "tom splisbury": "Tom Spilsbury",
+    "may friday": "Mary Kay Friday",
+    "dan gillespe": "Dan Gillespie",
+    "dan gilespie": "Dan Gillespie",
+    "melissa runningand": "Melissa Running",
+    "april blum tina chancey": "April Blum",
+    "diane schmit liz donaldson": "Diane Schmit",
+    "martha seigel liz donaldson": "Martha Seigel",
+    "feb 2 - ann fallon": "Ann Fallon",
+}
+
+CALLER_DROP = {
+    "composer", "coordinator", "ny", "queens",
+    "thanks to the following for filling-in for a caller who was",
+}
+
+
+def canonical_dance(name):
+    """Normalize a dance title's case and punctuation so duplicates merge."""
+    name = (name.replace("\u2019", "'").replace("\u2018", "'")
+                .replace("\u201c", '"').replace("\u201d", '"'))
+    for wrong, right in DANCE_CASE_FIXES.items():
+        name = name.replace(wrong, right)
+    tokens = name.split()
+    out = []
+    for i, t in enumerate(tokens):
+        low = t.casefold()
+        if i > 0 and low in SMALL_WORDS:
+            out.append(low)
+        else:
+            out.append(t[:1].upper() + t[1:])
+    return " ".join(out)
+
+
+def _title_tokens(text):
+    out = []
+    for i, t in enumerate(text.split()):
+        low = t.casefold()
+        if i > 0 and low in SMALL_WORDS:
+            out.append(low)
+        else:
+            out.append(t[:1].upper() + t[1:].lower())
+    return " ".join(out)
+
+
+def _fix_abbrevs(text):
+    return re.sub(r"\b(ma|vt|ny|nyc|nj|ca|dc|md|pa|mi|uk|usa|ecd|fsgw)\b",
+                  lambda m: m.group(1).upper(), text, flags=re.I)
+
+
+def canonical_caller_name(s):
+    """Canonicalize a single caller name (alias, drop, case)."""
+    s = re.sub(r"\s+", " ", s).strip(" \t,;.\u2013\u2014")
+    if not s:
+        return ""
+    s = strip_annotation(s)
+    s = s.strip(" \t,;.\u2013\u2014")
+    if not s:
+        return ""
+    low = s.casefold()
+    if low in CALLER_DROP:
+        return ""
+    if "colin hume" in low:
+        return "Colin Hume"
+    if low in CALLER_ALIASES:
+        return CALLER_ALIASES[low]
+    m = re.match(r"^(.*?)\s*(\([^()]*\))\s*$", s)
+    if m:
+        result = _title_tokens(m.group(1)) + " (" + m.group(2)[1:-1].lower() + ")"
+    else:
+        result = _title_tokens(s)
+    return _fix_abbrevs(result).strip()
+
+
 def clean_dance_name(raw):
     """Return (name, first_after_break, starred)."""
     name = raw.replace("\u00a0", " ").strip()
@@ -103,6 +204,7 @@ def clean_dance_name(raw):
         name = name[:-1].strip()
     # Strip a caller-initial tag like "(A)", "(AB)", "(AR - coordinator)".
     name = re.sub(r"\s*\([A-Z]{1,3}\s*(?:-\s*\w+)?\)$", "", name).strip()
+    name = canonical_dance(name)
     return name, first_after_break, starred
 
 
@@ -121,11 +223,11 @@ def split_callers(caller):
                 re.match(r"^[A-Z][\w' .\-\u2013]*(?:\s*\([A-Za-z]{1,3}[^)]*\))?$", s)
                 for s in segments):
             for s in segments:
-                s = strip_annotation(s)
+                s = canonical_caller_name(s)
                 if s:
                     out.append(s)
         else:
-            s = strip_annotation(part)
+            s = canonical_caller_name(part)
             if s:
                 out.append(s)
     return out
@@ -136,6 +238,7 @@ def strip_annotation(s):
     touch descriptive tags like "(guest caller from VT)"."""
     s = s.strip()
     s = re.sub(r"\s*\([A-Z]{1,3}\s*(?:-\s*\w+)?\)\s*$", "", s)
+    s = re.sub(r"\s*\(\s*co-?ordinator\s*\)\s*$", "", s, flags=re.I)
     return s.strip(" ,;")
 
 
@@ -159,6 +262,10 @@ def clean_caller(caller):
     c = re.sub(r"\s+[-–—]?\s*Live\s*!?$", "", c, flags=re.I)
     # Drop a trailing lesson annotation ("— 7:30 Lesson" / "Lesson: Bob").
     c = re.sub(r"\s*[;,–—-]*\s*(?:7:30\s*)?Lesson.*$", "", c, flags=re.I)
+    # Drop a trailing "…who will also teach the Lesson" note.
+    c = re.sub(r"\s*,?\s*who will also teach\b.*$", "", c, flags=re.I)
+    # Drop a trailing "; note" clause ("Mary Kay Friday; Guest caller: ...").
+    c = c.split(";", 1)[0].strip()
     return c.strip(" ,;")
 
 
@@ -454,6 +561,7 @@ def make_record(year, month, day, caller, music, mtype, host,
                 dance, set_i, pos, brk, star, notes, url):
     caller = clean_caller(caller)
     callers = split_callers(caller) if caller else []
+    caller = " and ".join(callers) if callers else ""
     return {
         "date": "%04d-%02d-%02d" % (year, month, day),
         "year": year,
