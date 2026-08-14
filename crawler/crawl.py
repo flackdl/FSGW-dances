@@ -325,7 +325,7 @@ def parse_info(info_text):
     if m:
         music = re.sub(r"\s+", " ", m.group(1)).strip()
     m = re.search(
-        r"Callers?\s*:\s*(.*?)(?=\s+(?:Musicians?|Musicans?|Muscians?|Music|Host)\s*:|$)",
+        r"Callers?\s*:?\s*(.*?)(?=\s+(?:Musicians?|Musicans?|Muscians?|Music|Host)\s*:|$)",
         info_text, re.I | re.S)
     if m:
         caller = re.sub(r"\s+", " ", m.group(1)).strip()
@@ -341,6 +341,11 @@ def parse_info(info_text):
             caller = real
         # A stray "note: ..." is not a caller.
         if re.match(r"^note\s*:", caller, re.I):
+            caller = ""
+        # A "Callers & Musicians" header leaks "& Musicians" as the caller;
+        # keep the label colon-optional (for "Caller Mary Kay Friday") but
+        # drop that header fragment.
+        if caller.strip().startswith("&") or re.match(r"^and\b", caller.strip(), re.I):
             caller = ""
     m = re.search(
         r"Host\s*:\s*(.*?)(?=\s+(?:Musicians?|Musicans?|Muscians?|Music)\s*:|$)",
