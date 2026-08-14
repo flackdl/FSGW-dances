@@ -105,6 +105,11 @@ DANCE_CASE_FIXES = {
     "H'Penny": "H'penny",
 }
 
+# Source typos where a whole title (or its leading word) is missing.
+DANCE_NAME_FIXES = {
+    "'s Round O": "Hambleton's Round O",
+}
+
 CALLER_ALIASES = {
     "andrea netleton": "Andrea Nettleton",
     "andrea nettelton": "Andrea Nettleton",
@@ -202,10 +207,44 @@ def clean_dance_name(raw):
     while name and name[-1] in "*\u2217\u2020\u2021":
         starred = True
         name = name[:-1].strip()
+    # Strip a leading symbol/numeral footnote marker like "(π)".
+    name = re.sub(r"^\(\s*[^A-Za-z]*\s*\)\s*", "", name).strip()
     # Strip a caller-initial tag like "(A)", "(AB)", "(AR - coordinator)".
     name = re.sub(r"\s*\([A-Z]{1,3}\s*(?:-\s*\w+)?\)$", "", name).strip()
+    for wrong, right in DANCE_NAME_FIXES.items():
+        if name.casefold() == wrong.casefold():
+            name = right
+            break
     name = canonical_dance(name)
     return name, first_after_break, starred
+
+
+# Lines that are annotations, footnotes, break markers, or separators rather
+# than dance titles. These leak into the dance field unless filtered out.
+NOTE_LINE_RES = [
+    re.compile(r"^[\s\-–—_=*\u2217\u2020\u2021]+$"),   # separators / dashes
+    re.compile(r"^[-–—]{2,}"),                         # "--" / "—" notes
+    re.compile(r"^\*+"),                                # footnote markers
+    re.compile(r"^and\b", re.I),                        # "and Rufty Tufty"
+    re.compile(r"^by\b", re.I),                         # "by Graham Christian"
+    re.compile(r"^(?:ch|co)\s*:", re.I),                # "Ch:" / "Co:" notes
+    re.compile(r"^note\s*:?", re.I),
+    re.compile(r"^(?:also\s+known\s+as|alternate\s+version|premier|premiere)\b",
+               re.I),
+    re.compile(r"^(?:break|dessert|midnight|champagne)\b", re.I),
+    re.compile(r"^\([^()]*\)\s*$"),                     # "(It snowed ...)"
+    re.compile(r":\s*$"),                               # "…Handout / label:"
+]
+
+
+def is_note_line(text):
+    """True if a stripped line is a note/annotation, not a dance title."""
+    s = (text or "").replace("\u00a0", " ").strip()
+    if s.startswith("~"):
+        s = s[1:].strip()
+    if not s:
+        return True
+    return any(rx.match(s) for rx in NOTE_LINE_RES)
 
 
 def split_callers(caller):
@@ -270,23 +309,31 @@ def clean_caller(caller):
 
 
 def parse_info(info_text):
-    """Extract caller, music, host from an info blob."""
+    """Extract caller, music, host from an info blob.
+
+    Labels are occasionally lower-case ("caller:") or misspelled
+    ("Muscians:", "Musicans:"), so matching is case-insensitive and the
+    colon after the label is the reliable anchor.
+    """
     info_text = info_text.replace("\u00a0", " ").strip()
     caller = ""
     music = ""
     host = ""
-    m = re.search(r"(?:Musicians?|Music):\s*(.*?)(?=\s+Host:|$)", info_text, re.S)
+    m = re.search(
+        r"(?:Musicians?|Musicans?|Muscians?|Music)\s*:\s*(.*?)(?=\s+Host\s*:|$)",
+        info_text, re.I | re.S)
     if m:
         music = re.sub(r"\s+", " ", m.group(1)).strip()
-    m = re.search(r"Callers?\s*:?\s*(.*?)(?=\s+(?:Musicians?|Music|Host):|$)",
-                  info_text, re.S)
+    m = re.search(
+        r"Callers?\s*:\s*(.*?)(?=\s+(?:Musicians?|Musicans?|Muscians?|Music|Host)\s*:|$)",
+        info_text, re.I | re.S)
     if m:
         caller = re.sub(r"\s+", " ", m.group(1)).strip()
         # Strip a repeated/leaked "Caller(s):" label (source typos).
         caller = re.sub(r"^(?:Callers?\s*:?\s*)+", "", caller, flags=re.I).strip()
         # Source occasionally leaves the caller blank, so the next label
         # ("Music: ...") leaks into the caller slot; recover the real name.
-        m2 = re.match(r"^(?:Music|Musicians|Host):\s*(.*)$", caller, re.I | re.S)
+        m2 = re.match(r"^(?:Music|Musicians|Host)\s*:\s*(.*)$", caller, re.I | re.S)
         if m2:
             real = m2.group(1).strip()
             if music and music.lower() == real.lower():
@@ -295,7 +342,9 @@ def parse_info(info_text):
         # A stray "note: ..." is not a caller.
         if re.match(r"^note\s*:", caller, re.I):
             caller = ""
-    m = re.search(r"Host:\s*(.*?)$", info_text, re.S)
+    m = re.search(
+        r"Host\s*:\s*(.*?)(?=\s+(?:Musicians?|Musicans?|Muscians?|Music)\s*:|$)",
+        info_text, re.I | re.S)
     if m:
         host = re.sub(r"\s+", " ", m.group(1)).strip()
     return caller, music, host
@@ -363,8 +412,9 @@ def parse_html(html_text, year, url):
             mtype = music_type(music)
 
             notes = []
-            for fp in tr.find_all("span", class_="fineprint"):
-                notes.append(fp.get_text(" ", strip=True))
+            for cls in ("fineprint", "sml"):
+                for fp in tr.find_all(class_=cls):
+                    notes.append(fp.get_text(" ", strip=True))
 
             for set_i, td in enumerate(tds[1:], start=1):
                 pos = 0
@@ -386,8 +436,14 @@ def cell_text(td):
 
 def dance_cells(td):
     """Yield (dance_name, first_after_break, starred) for a dance cell."""
-    for fp in td.find_all("span", class_="fineprint"):
-        fp.decompose()
+    # Remove note markup first: fineprint/sml blocks, plus bordered "Note:"
+    # boxes (e.g. "this dance was conducted at Ballroom Blum").
+    for cls in ("fineprint", "sml"):
+        for tag in td.find_all(class_=cls):
+            tag.decompose()
+    for div in td.find_all("div"):
+        if "border" in (div.get("style") or "").lower():
+            div.decompose()
     for sup in td.find_all("sup"):
         sup.decompose()
     for br in td.find_all("br"):
@@ -398,11 +454,7 @@ def dance_cells(td):
         line = line.replace("\u00a0", " ").strip()
         if not line:
             continue
-        if line.startswith("(") and items:
-            items[-1][0] = items[-1][0] + " " + line
-            # The merged fragment may be a caller-initial tag like "(A)".
-            items[-1][0] = re.sub(
-                r"\s*\([A-Z]{1,3}\s*(?:-\s*\w+)?\)$", "", items[-1][0]).strip()
+        if is_note_line(line):
             continue
         name, brk, star = clean_dance_name(line)
         if name and not re.match(r"^(?:Callers?|Musicians?|Music|Prompters?|Host)\b",
@@ -456,6 +508,45 @@ def is_meta_line(s):
     return bool(META_RE.match(s.strip()))
 
 
+def _infer_columns(stripped_lines):
+    """Infer the start offsets of columns 2 and 3 from well-aligned lines.
+
+    Text listings align dance titles into two or three columns separated by
+    runs of 2+ spaces. When a title is too long the author sometimes leaves
+    only a single space, merging the next column into it; the inferred
+    boundary lets us recover the split.
+    """
+    col2 = {}
+    col3 = {}
+    for s in stripped_lines:
+        gaps = list(re.finditer(r"\s{2,}", s))
+        if len(gaps) >= 1:
+            col2[gaps[0].end()] = col2.get(gaps[0].end(), 0) + 1
+        if len(gaps) >= 2:
+            col3[gaps[1].end()] = col3.get(gaps[1].end(), 0) + 1
+
+    def _mode(d):
+        if not d:
+            return None
+        pos = max(d, key=lambda k: (d[k], -k))
+        return pos if d[pos] >= 2 else None
+
+    return _mode(col2), _mode(col3)
+
+
+def _split_dance_columns(stripped, col2, col3):
+    parts = [c.strip() for c in re.split(r"\s{2,}", stripped) if c.strip()]
+    # If the first title overruns the inferred column-2 boundary because the
+    # source used a single space there, split it back apart.
+    if (col2 and parts and len(parts[0]) > col2
+            and 0 < col2 <= len(stripped) and stripped[col2 - 1] == " "):
+        left = parts[0][:col2 - 1].strip()
+        right = parts[0][col2:].strip()
+        if left and right:
+            parts = [left, right] + parts[1:]
+    return parts
+
+
 def parse_block(block, year_hint, url):
     date_line_idx = -1
     date_match = None
@@ -506,20 +597,34 @@ def parse_block(block, year_hint, url):
     caller, music, host = parse_info(info)
     mtype = music_type(music)
 
+    # A block with no caller/musician/host info and no meta labels (e.g. a
+    # bare "Washington Spring Ball" banner) has no dances worth recording.
+    if not caller and not music and not host and not re.search(
+            r"(?:Callers?|Musicians?|Musicans?|Music|Prompters?|Host)\s*:",
+            info, re.I):
+        return []
+
     # Parse dances from the body (column-aligned text).
-    columns = [[], [], []]
+    rows = []
     for line in dance_lines:
         s = line.rstrip("\n")
         if not s.strip():
             continue
         stripped = s.strip()
+        if is_note_line(stripped):
+            continue
         if re.match(r"^\d{1,2}:\d{2}\b", stripped):
             continue  # time marker / break annotation
         if re.match(r"^Close with", stripped, re.I):
             continue
         leading = len(s) - len(s.lstrip())
-        cols = re.split(r"\s{2,}", stripped)
-        cols = [c.strip() for c in cols if c.strip()]
+        rows.append((leading, stripped))
+
+    col2, col3 = _infer_columns([s for _, s in rows])
+
+    columns = [[], [], []]
+    for leading, stripped in rows:
+        cols = _split_dance_columns(stripped, col2, col3)
         if not cols:
             continue
         if leading > 0 and len(cols) == 1:
@@ -534,6 +639,8 @@ def parse_block(block, year_hint, url):
                 columns[0].append(cols[0])
             continue
         for idx, c in enumerate(cols[:3]):
+            if is_note_line(c):
+                continue
             columns[idx].append(c)
 
     records = []
